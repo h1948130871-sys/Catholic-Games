@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>团队对抗赛 - 圣三三重奏</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        body { font-family: -apple-system, "Microsoft YaHei", sans-serif; background: #FAFAFA; color: #333; text-align: center; margin: 0; padding: 0; overflow-x: hidden; }
+        .container { background: white; border-radius: 15px; padding: 20px; max-width: 600px; margin: 5px auto; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        h1 { color: #1D3C78; margin-top: 0; font-size: 24px; }
+        input, select { width: 85%; padding: 12px; margin: 8px 0; border: 2px solid #ddd; border-radius: 8px; font-size: 16px; text-align: center; box-sizing: border-box; }
+        button { background-color: #1D3C78; color: white; border: none; padding: 12px 20px; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 10px; transition: 0.2s; width: 90%; }
+        button:hover { background-color: #152b59; }
+        button:disabled { background-color: #B0BEC5 !important; cursor: not-allowed; }
+        
+        #lobby-screen, #waiting-screen, #play-screen { display: none; }
+        
+        /* ---------------- 大厅选座 CSS ---------------- */
+        .seat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin: 20px 0; padding: 10px; background: #f9f9f9; border-radius: 15px; border: 2px solid #eee;}
+        .seat-box { height: 75px; border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; border: 2px dashed #B0BEC5; background: #FAFAFA; transition: all 0.2s; position: relative;}
+        .seat-box.red-seat { border-color: #EF9A9A; }
+        .seat-box.blue-seat { border-color: #90CAF9; }
+        .seat-box.empty:hover { background: #ECEFF1; transform: scale(1.05); }
+        .seat-box.occupied { cursor: not-allowed; border-style: solid; opacity: 0.9; }
+        .seat-box.my-seat { border: 3px solid #FBC02D; background: #FFFDE7 !important; box-shadow: 0 0 15px rgba(251,192,45,0.6); cursor: default; transform: scale(1.05); z-index: 5;}
+        .seat-number { position: absolute; top: 3px; left: 5px; font-size: 10px; color: #999; }
+
+        /* ---------------- 圆桌与 3D 翻牌 CSS ---------------- */
+        #round-table-area { position: relative; width: 100%; max-width: 600px; height: 480px; margin: 0 auto 15px auto; background: #E3F2FD; border-radius: 20px; box-shadow: inset 0 0 20px rgba(0,0,0,0.1); overflow: hidden; }
+        
+        #center-pool { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 160px; height: 160px; display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; align-items: center; z-index: 10; }
+        
+        /* 3D 结构 */
+        .table-card-wrapper { width: 32px; height: 48px; perspective: 1000px; }
+        .tcard-inner { position: relative; width: 100%; height: 100%; text-align: center; transition: transform 0.5s cubic-bezier(0.4, 0.2, 0.2, 1); transform-style: preserve-3d; box-shadow: 0 2px 5px rgba(0,0,0,0.3); border-radius: 4px; }
+        .tcard-inner.is-flipped { transform: rotateY(180deg); }
+        .tcard-back, .tcard-front { position: absolute; width: 100%; height: 100%; backface-visibility: hidden; border-radius: 4px; display: flex; flex-direction: column; justify-content: center; align-items: center; border: 1px solid #fff; box-sizing: border-box; }
+        .tcard-back { background: repeating-linear-gradient(45deg, #1D3C78, #1D3C78 6px, #152b59 6px, #152b59 12px); color: white; font-size: 12px; font-weight: bold; cursor: pointer; transition: transform 0.2s;}
+        .tcard-back:hover { box-shadow: 0 0 10px #FBC02D; border-color: #FBC02D; transform: scale(1.1); }
+        .tcard-front { background: white; transform: rotateY(180deg); border: 1px solid #1D3C78; }
+        .tcard-front .c-num { font-size: 18px; color: #D32F2F; font-weight: bold; line-height: 1; }
+        .tcard-front .c-text { font-size: 8px; color: #1D3C78; font-weight: bold; margin-top: 2px; line-height: 1; }
+        
+        .seat { position: absolute; width: 100px; text-align: center; transform: translate(-50%, -50%); transition: all 0.3s; z-index: 20; }
+        .seat-name { background: #FFF; padding: 4px 8px; border-radius: 12px; font-weight: bold; font-size: 14px; border: 2px solid #ccc; box-shadow: 0 2px 5px rgba(0,0,0,0.2); white-space: nowrap; position: relative; }
+        .seat.active .seat-name { background: #FFFDE7; border-color: #F57F17; color: #E65100; box-shadow: 0 0 15px #FFEB3B; transform: scale(1.1); }
+        .seat-info { font-size: 12px; color: #666; margin-top: 2px; }
+        
+        /* 索要牌按钮 (玩家头上) */
+        .seat-actions { position: absolute; top: -38px; left: 50%; transform: translateX(-50%); display: flex; gap: 5px; z-index: 30; white-space: nowrap; }
+        .ask-btn { padding: 6px 10px; border-radius: 6px; color: white; border: none; font-size: 12px; cursor: pointer; font-weight: bold; box-shadow: 0 2px 5px rgba(0,0,0,0.3); transition: transform 0.1s; }
+        .ask-btn:active { transform: scale(0.9); }
+        .ask-btn.low { background: #0288D1; }
+        .ask-btn.high { background: #D32F2F; }
+
+        /* 玩家自己抽出的牌悬浮 */
+        .player-revealed { position: absolute; z-index: 40; width: 45px; height: 65px; border-radius: 6px; border: 2px solid #1D3C78; background: white; box-shadow: 0 5px 15px rgba(0,0,0,0.4); display: flex; flex-direction: column; align-items: center; justify-content: center; animation: popIn 0.3s cubic-bezier(0.2, 0.8, 0.2, 1); }
+        @keyframes popIn { 0% { transform: translate(-50%, -50%) scale(0); } 100% { transform: translate(-50%, -50%) scale(1); } }
+        .player-revealed .c-num { font-size: 20px; font-weight: bold; color: #D32F2F; line-height: 1; }
+        .player-revealed .c-text { font-size: 9px; color: #1D3C78; font-weight: bold; margin-top: 2px; text-align: center; }
+
+        /* 团队颜色 */
+        .team-red .seat-name { color: #D32F2F; border-color: #EF9A9A; background: #FFEBEE; }
+        .team-blue .seat-name { color: #1976D2; border-color: #90CAF9; background: #E3F2FD; }
+
+        /* ---------------- 私人区 & 战利品 ---------------- */
+        .private-area { background: #FFFDE7; border-top: 3px solid #FBC02D; padding: 15px; margin-top: -15px; padding-bottom: 30px; }
+        .hand-area { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 10px; }
+        .real-card { width: 60px; height: 85px; border-radius: 6px; border: 2px solid #1D3C78; background: white; box-shadow: 0 3px 6px rgba(0,0,0,0.2); display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .c-num { font-size: 24px; font-weight: bold; color: #D32F2F; line-height: 1; }
+        .c-text { font-size: 11px; color: #1D3C78; font-weight: bold; margin-top: 4px; text-align: center; line-height: 1.1; padding: 0 2px;}
+        
+        #turn-status { font-size: 16px; font-weight: bold; padding: 10px; border-radius: 8px; margin-bottom: 10px; }
+        #team-banner { padding:8px; font-weight:bold; font-size:16px; background:#fff; text-align:center; border-radius: 8px; margin-bottom: 10px; border: 2px solid #ccc;}
+        .public-sets-board { display: flex; justify-content: space-between; padding: 10px; background: white; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 15px; }
+        .team-pool { width: 48%; }
+        .pool-title { font-weight: bold; font-size: 14px; margin-bottom: 5px; }
+        .mini-set { background: #E8F5E9; border: 1px solid #4CAF50; border-radius: 4px; padding: 2px 5px; font-size: 12px; color: #2E7D32; font-weight: bold; display: inline-block; margin: 2px; }
+
+        /* 全局打断层 */
+        .interrupt-overlay { display: none; position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0, 10, 30, 0.9); z-index: 100; flex-direction: column; align-items: center; justify-content: center; color: white; text-align: center; }
+        .interrupt-box { background: #FDFBF7; color: #333; padding: 30px; border-radius: 15px; width: 85%; max-width: 400px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); border: 4px solid #FBC02D; }
+        .btn-yes { background: #4CAF50; width: 45%; display: inline-block; margin: 5px; color: white; border: none; padding: 10px; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer;}
+        .btn-no { background: #D32F2F; width: 45%; display: inline-block; margin: 5px; color: white; border: none; padding: 10px; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer;}
+        .swap-card-btn { background: white; color: #1D3C78; border: 2px solid #FBC02D; font-size: 24px; font-weight: bold; padding: 15px; border-radius: 8px; margin: 5px; cursor: pointer; min-width: 50px; display: inline-block; text-align: center; }
+        .swap-card-btn:hover { background: #FFFDE7; transform: scale(1.1); }
+        .back-nav { position: absolute; top: 10px; left: 10px; font-size: 14px; color: #C62828; text-decoration: none; font-weight: bold; background: #FFEBEE; padding: 5px 10px; border-radius: 15px; border: 1px solid #EF9A9A; z-index: 200; }
+    </style>
+</head>
+<body>
+
+    <a href="index.html" class="back-nav">🔙 退出房间</a>
+
+    <!-- 1. 登录大厅 -->
+    <div id="lobby-screen" class="container" style="display: block; margin-top: 40px;">
+        <h1 style="color:#D32F2F;">⚔️ 团队对抗赛</h1>
+        <p style="font-size: 14px; color:#666; margin-bottom: 20px;">4人或6人局。加入后可点击空位调换座位。</p>
+        <input type="text" id="player-name" placeholder="输入你的名字 (必填)" maxlength="8">
+        <div style="background: #f5f5f5; padding: 15px; border-radius: 10px; margin-top: 15px;">
+            <strong style="color: #1D3C78;">发起新游戏</strong>
+            <button id="create-room-btn" onclick="createRoom()" style="background-color: #D32F2F;">🏠 创建房间并加入</button>
+        </div>
+        <div style="background: #f5f5f5; padding: 15px; border-radius: 10px; margin-top: 15px;">
+            <strong style="color: #2E7D32;">加入朋友的游戏</strong>
+            <input type="text" id="room-code-input" placeholder="输入4位房间号" maxlength="4" style="text-transform: uppercase;">
+            <button id="join-room-btn" onclick="joinRoom()" style="background-color: #4CAF50;">📱 加入房间</button>
+        </div>
+        <p id="lobby-msg" style="color: #D32F2F; font-weight: bold; margin-top: 10px;"></p>
+    </div>
+
+    <!-- 2. 等待室 (选座) -->
+    <div id="waiting-screen" class="container" style="margin-top: 40px;">
+        <h2>房间: <span id="display-room-code" style="color:#D32F2F; font-size: 32px; letter-spacing: 4px;">----</span></h2>
+        
+        <div id="host-settings" style="display:none; background:#FFFDE7; padding:15px; border-radius:10px; border:2px dashed #FBC02D; margin-bottom:15px;">
+            <strong style="color:#F57F17;">⚙️ 游戏模式设置 (仅房主)</strong><br>
+            <select id="mode-select" style="width: 100%; margin-top: 10px;">
+                <option value="team-standard">⚔️ 团队标准战 (队伍凑齐3组获胜)</option>
+                <option value="team-basic">⚔️ 团队入门战 (队伍凑齐连锁7，或拿3张7)</option>
+            </select>
+        </div>
+
+        <p style="margin-bottom: 5px; font-weight: bold;">点击空位选座 (红蓝交叉组队)：</p>
+        <div id="seat-grid" class="seat-grid"></div>
+
+        <button id="start-btn" style="display: none;" onclick="startGame()">🎲 确认落座并开始</button>
+        <p id="waiting-msg" style="color: #D32F2F; font-weight: bold;"></p>
+    </div>
+
+    <!-- 3. 游戏主界面 -->
+    <div id="play-screen" style="display:none; width: 100%; max-width: 600px; margin: 0 auto;">
+        <div id="team-banner">加载中...</div>
+
+        <div class="public-sets-board">
+            <div class="team-pool">
+                <div class="pool-title" style="color:#D32F2F;">🔴 圣红队已得：</div>
+                <div id="red-pool-content" style="min-height: 25px;"></div>
+            </div>
+            <div style="border-right: 2px dashed #ccc;"></div>
+            <div class="team-pool">
+                <div class="pool-title" style="color:#1976D2;">🔵 圣蓝队已得：</div>
+                <div id="blue-pool-content" style="min-height: 25px;"></div>
+            </div>
+        </div>
+
+        <div id="turn-status">加载中...</div>
+
+        <div id="round-table-area">
+            <div id="center-pool"></div>
+            <div id="player-revealed-cards"></div> 
+            <div id="seats-container"></div>
+        </div>
+
+        <div class="private-area">
+            <div style="font-weight: bold; color: #1D3C78; margin-bottom: 10px;">🖐️ 我的手牌 (已排序)</div>
+            <div id="my-hand" class="hand-area"></div>
+        </div>
+    </div>
+
+    <div id="interrupt-overlay" class="interrupt-overlay">
+        <div id="interrupt-box" class="interrupt-box">
+            <h2 id="int-title" style="margin-top:0; color:#1D3C78;">询问</h2>
+            <p id="int-desc" style="font-size:16px;">内容</p>
+            <div id="int-content"></div>
+        </div>
+    </div>
+
+    <script>
+        const cardDefs = { 1:"一神", 2:"两性", 3:"三超德", 4:"四枢德", 5:"五伤", 6:"六水缸", 7:"圣神七恩", 8:"八端", 9:"九品天使", 10:"十诫", 11:"十一徒", 12:"十二宗徒" };
+
+        let peer = null; let myConn = null; let isHost = false; let myPlayerName = "";
+        let myPeerId = null; 
+        
+        let serverConns = []; 
+        let serverSeats = [null, null, null, null, null, null]; 
+
+        let gameState = {
+            mode: "team-standard", roundNumber: 1,  
+            players: [], teamSets: { red: [], blue: [] }, tableCards: [], 
+            activePlayerIndex: 0, stageCards: [], isProcessing: false,
+            swapPhase: { active: false, type: "", allowedTeams: [], responses: {}, executingTeam: null, participants: [], pendingOffers: {} }
+        };
+
+        function showScreen(id) {
+            document.getElementById('lobby-screen').style.display = 'none';
+            document.getElementById('waiting-screen').style.display = 'none';
+            document.getElementById('play-screen').style.display = 'none';
+            document.getElementById(id).style.display = 'block';
+        }
+
+        // ==========================================
+        // 1. 建立与加入 (防连点)
+        // ==========================================
+        function resetLobbyButtons() {
+            const createBtn = document.getElementById('create-room-btn');
+            const joinBtn = document.getElementById('join-room-btn');
+            if(createBtn) { createBtn.disabled = false; createBtn.innerHTML = "🏠 创建房间并加入"; }
+            if(joinBtn) { joinBtn.disabled = false; joinBtn.innerHTML = "📱 加入房间"; }
+        }
+
+        function createRoom() {
+            myPlayerName = document.getElementById('player-name').value.trim();
+            if (!myPlayerName) return alert("请输入名字！");
+
+            const btn = document.getElementById('create-room-btn');
+            btn.disabled = true; btn.innerHTML = "⏳ 正在建房...";
+
+            isHost = true;
+            const roomCode = Math.random().toString(36).substring(2, 6).toUpperCase();
+            myPeerId = 'holy-team-' + roomCode; 
+            peer = new Peer(myPeerId); 
+            
+            peer.on('open', (id) => {
+                showScreen('waiting-screen');
+                document.getElementById('display-room-code').innerText = roomCode;
+                document.getElementById('host-settings').style.display = 'block';
+                simulateLocalConnection(id, myPlayerName);
+            });
+
+            peer.on('connection', (conn) => {
+                conn.on('data', (data) => {
+                    if (data.type === 'join') {
+                        serverConns.push({ id: conn.peer, name: data.name, conn: conn });
+                        let emptyIdx = serverSeats.indexOf(null);
+                        if (emptyIdx !== -1) serverSeats[emptyIdx] = { id: conn.peer, name: data.name };
+                        else { conn.send({ type: 'error', msg: '房间已满！' }); return; }
+
+                        updateWaitingRoomUI();
+                        conn.send({ type: 'joined', roomCode: roomCode, myId: conn.peer });
+                    }
+                    else if (data.type === 'change_seat') handleSeatChange(conn.peer, data.targetIndex);
+                    else if (data.type === 'action' && !gameState.isProcessing && !gameState.swapPhase.active) handlePlayerAction(data.actionData);
+                    else if (data.type === 'swap_vote') handleSwapVote(conn.peer, data.vote); 
+                    else if (data.type === 'swap_offer_card') handleSwapOfferCard(conn.peer, data.cardVal);
+                });
+            });
+
+            peer.on('error', () => {
+                document.getElementById('lobby-msg').innerText = "建房失败，网络问题。";
+                resetLobbyButtons(); 
+            });
+        }
+
+        function joinRoom() {
+            myPlayerName = document.getElementById('player-name').value.trim();
+            const roomCode = document.getElementById('room-code-input').value.toUpperCase();
+            if (!myPlayerName || roomCode.length !== 4) return alert("输入有误！");
+
+            const btn = document.getElementById('join-room-btn');
+            btn.disabled = true; btn.innerHTML = "⏳ 正在连接...";
+            document.getElementById('lobby-msg').innerText = "";
+
+            isHost = false;
+            peer = new Peer();
+            peer.on('open', (id) => {
+                myPeerId = id; 
+                myConn = peer.connect('holy-team-' + roomCode);
+                
+                myConn.on('open', () => myConn.send({ type: 'join', name: myPlayerName }));
+                
+                myConn.on('data', (data) => {
+                    if (data.type === 'joined') {
+                        showScreen('waiting-screen');
+                        document.getElementById('display-room-code').innerText = data.roomCode;
+                    }
+                    else if (data.type === 'error') { alert(data.msg); location.reload(); }
+                    else if (data.type === 'waiting_update') renderSeatSelection(data.seats, data.canStart, data.msg);
+                    else if (data.type === 'state') renderPlayerUI(data);
+                    else if (data.type === 'ask_swap') showAskSwapUI(data.title, data.desc);
+                    else if (data.type === 'ask_offer_card') showOfferCardUI();
+                    else if (data.type === 'close_overlay') document.getElementById('interrupt-overlay').style.display = 'none';
+                });
+            });
+
+            peer.on('error', () => {
+                document.getElementById('lobby-msg').innerText = "找不到房间或连接超时！";
+                resetLobbyButtons(); 
+            });
+        }
+
+        function simulateLocalConnection(hostPeerId, name) {
+            const localConn = {
+                peer: hostPeerId,
+                send: (data) => {
+                    if (data.type === 'waiting_update') renderSeatSelection(data.seats, data.canStart, data.msg);
+                    else if (data.type === 'state') renderPlayerUI(data);
+                    else if (data.type === 'ask_swap') showAskSwapUI(data.title, data.desc);
+                    else if (data.type === 'ask_offer_card') showOfferCardUI();
+                    else if (data.type === 'close_overlay') document.getElementById('interrupt-overlay').style.display = 'none';
+                }
+            };
+            serverConns.push({ id: hostPeerId, name: name, conn: localConn });
+            serverSeats[0] = { id: hostPeerId, name: name }; 
+
+            myConn = { 
+                send: (data) => { 
+                    if (data.type === 'change_seat') handleSeatChange(hostPeerId, data.targetIndex);
+                    else if (data.type === 'action' && !gameState.isProcessing && !gameState.swapPhase.active) handlePlayerAction(data.actionData); 
+                    else if (data.type === 'swap_vote') handleSwapVote(hostPeerId, data.vote);
+                    else if (data.type === 'swap_offer_card') handleSwapOfferCard(hostPeerId, data.cardVal);
+                } 
+            };
+            updateWaitingRoomUI();
+        }
+
+        function handleSeatChange(peerId, targetIndex) {
+            if (serverSeats[targetIndex] === null) {
+                let currIdx = serverSeats.findIndex(s => s && s.id === peerId);
+                if (currIdx !== -1) {
+                    serverSeats[targetIndex] = serverSeats[currIdx];
+                    serverSeats[currIdx] = null;
+                    updateWaitingRoomUI();
+                }
+            }
+        }
+
+        function updateWaitingRoomUI() {
+            let redCount = 0, blueCount = 0, total = 0;
+            serverSeats.forEach((s, i) => {
+                if (s) { total++; if (i % 2 === 0) redCount++; else blueCount++; }
+            });
+            
+            let canStart = (total === 4 || total === 6) && (redCount === blueCount);
+            let msg = canStart ? "✅ 座位已平衡，房主可以点击开始！" : `当前：红队 ${redCount} 人，蓝队 ${blueCount} 人。需 4/6 人且红蓝相等！`;
+
+            serverConns.forEach(c => c.conn.send({ type: 'waiting_update', seats: serverSeats, canStart: canStart, msg: msg }));
+        }
+
+        function renderSeatSelection(seats, canStart, msg) {
+            const grid = document.getElementById('seat-grid');
+            grid.innerHTML = '';
+            seats.forEach((seat, i) => {
+                let isRed = i % 2 === 0;
+                let boxClass = `seat-box ${isRed ? 'red-seat' : 'blue-seat'}`;
+                let teamLabel = isRed ? '🔴 红队' : '🔵 蓝队';
+                if (seat === null) {
+                    grid.innerHTML += `<div class="${boxClass} empty" onclick="requestChangeSeat(${i})"><div class="seat-number">${i+1}</div>${teamLabel}<br><span style="font-size:12px; color:#666;">点击入座</span></div>`;
+                } else {
+                    let isMe = seat.id === myPeerId;
+                    let occClass = isMe ? 'my-seat' : 'occupied';
+                    let bgColor = isRed ? (isMe ? '#ffcdd2' : '#ffebee') : (isMe ? '#bbdefb' : '#e3f2fd');
+                    grid.innerHTML += `<div class="${boxClass} ${occClass}" style="background:${bgColor};" ${isMe ? '' : `onclick="alert('该座位已有人')"`}><div class="seat-number">${i+1}</div>${teamLabel}<br><strong style="color:#1D3C78;">${seat.name}</strong>${isMe ? '<br><span style="font-size:12px; color:#D32F2F;">(我)</span>' : ''}</div>`;
+                }
+            });
+            document.getElementById('waiting-msg').innerText = msg;
+            if (isHost) document.getElementById('start-btn').style.display = canStart ? 'inline-block' : 'none';
+        }
+
+        function requestChangeSeat(index) { myConn.send({ type: 'change_seat', targetIndex: index }); }
+
+        // ==========================================
+        // 2. 服务器游戏核心逻辑 (3D固定桌牌 + 换牌)
+        // ==========================================
+        function startGame() {
+            gameState.mode = document.getElementById('mode-select').value;
+            let activeSeats = serverSeats.map((s, i) => s ? { ...s, originalIndex: i } : null).filter(s => s !== null);
+            let pCount = activeSeats.length;
+
+            let deck = [];
+            for (let i = 1; i <= 12; i++) deck.push(i, i, i);
+            deck.sort(() => Math.random() - 0.5);
+
+            let cardsPerPlayer = pCount === 4 ? 7 : 6; 
+            gameState.teamSets = { red: [], blue: [] };
+            
+            gameState.players = activeSeats.map((s) => {
+                let hand = deck.splice(0, cardsPerPlayer);
+                hand.sort((a, b) => a - b); 
+                let team = s.originalIndex % 2 === 0 ? "red" : "blue"; 
+                let pConn = serverConns.find(c => c.id === s.id).conn;
+                return { id: s.id, name: s.name, hand: hand, sets: [], conn: pConn, team: team };
+            });
+            
+            // 固定坑位的 3D 桌牌
+            gameState.tableCards = deck.map((v, i) => ({ id: i, val: v, state: 'hidden' }));
+            gameState.activePlayerIndex = 0;
+            gameState.stageCards = [];
+            gameState.roundNumber = 1; 
+            
+            syncStateToAll();
+        }
+
+        function triggerSwapPhase(type, allowedTeams) {
+            gameState.swapPhase = {
+                active: true, type: type, allowedTeams: allowedTeams,
+                responses: { red: [], blue: [] }, executingTeam: null, participants: [], pendingOffers: {}
+            };
+            gameState.isProcessing = true; 
+            syncStateToAll(); 
+
+            let title, desc;
+            if (type === 'round_start') {
+                title = `🔄 第 ${gameState.roundNumber} 轮开始！`;
+                desc = "各队可决定是否要内部交换一次手牌。<br><span style='color:#D32F2F; font-size:14px;'>(全队只要有≥2人选'是'即交换；6人局全票同意则逆时针轮抽)</span>";
+            } else {
+                title = "⚠️ 对方队伍得分了！";
+                desc = "对方离胜利更近了一步。是否要行使反击权利交换手牌？<br><span style='color:#D32F2F; font-size:14px;'>(同上)</span>";
+            }
+
+            gameState.players.forEach(p => {
+                if (allowedTeams.includes(p.team)) p.conn.send({ type: 'ask_swap', title: title, desc: desc });
+            });
+        }
+
+        function handleSwapVote(playerId, vote) {
+            let p = gameState.players.find(x => x.id === playerId);
+            gameState.swapPhase.responses[p.team].push({ id: playerId, vote: vote });
+
+            let allVoted = true;
+            gameState.swapPhase.allowedTeams.forEach(t => {
+                let teamTotal = gameState.players.filter(x => x.team === t).length;
+                if (gameState.swapPhase.responses[t].length < teamTotal) allVoted = false;
+            });
+
+            if (allVoted) {
+                let redYes = gameState.swapPhase.responses.red.filter(v => v.vote === 'yes').map(v => v.id);
+                let blueYes = gameState.swapPhase.responses.blue.filter(v => v.vote === 'yes').map(v => v.id);
+
+                let redWants = gameState.swapPhase.allowedTeams.includes('red') && redYes.length >= 2;
+                let blueWants = gameState.swapPhase.allowedTeams.includes('blue') && blueYes.length >= 2;
+
+                if (redWants && blueWants) {
+                    startTeamSwapExecution('red', redYes, () => startTeamSwapExecution('blue', blueYes, finishSwapPhase));
+                } else if (redWants) {
+                    startTeamSwapExecution('red', redYes, finishSwapPhase);
+                } else if (blueWants) {
+                    startTeamSwapExecution('blue', blueYes, finishSwapPhase);
+                } else {
+                    finishSwapPhase(); 
+                }
+            }
+        }
+
+        let swapCallback = null;
+        function startTeamSwapExecution(team, participants, callback) {
+            gameState.swapPhase.executingTeam = team;
+            gameState.swapPhase.participants = participants; 
+            gameState.swapPhase.pendingOffers = {};
+            swapCallback = callback;
+            syncStateToAll(); 
+
+            participants.forEach(pid => {
+                let p = gameState.players.find(x => x.id === pid);
+                p.conn.send({ type: 'ask_offer_card' });
+            });
+        }
+
+        function handleSwapOfferCard(playerId, cardVal) {
+            gameState.swapPhase.pendingOffers[playerId] = cardVal;
+            let p = gameState.players.find(x => x.id === playerId);
+            p.hand.splice(p.hand.indexOf(cardVal), 1);
+
+            if (Object.keys(gameState.swapPhase.pendingOffers).length === gameState.swapPhase.participants.length) {
+                executeCardExchange();
+            }
+        }
+
+        function executeCardExchange() {
+            let parts = gameState.swapPhase.participants;
+            let offers = gameState.swapPhase.pendingOffers;
+
+            if (parts.length === 2) {
+                let p1 = gameState.players.find(x => x.id === parts[0]);
+                let p2 = gameState.players.find(x => x.id === parts[1]);
+                p1.hand.push(offers[parts[1]]); p2.hand.push(offers[parts[0]]);
+                p1.hand.sort((a,b)=>a-b); p2.hand.sort((a,b)=>a-b);
+            } 
+            else if (parts.length === 3) {
+                let p0 = gameState.players.find(x => x.id === parts[0]);
+                let p1 = gameState.players.find(x => x.id === parts[1]);
+                let p2 = gameState.players.find(x => x.id === parts[2]);
+                p0.hand.push(offers[parts[1]]); p1.hand.push(offers[parts[2]]); p2.hand.push(offers[parts[0]]);
+                p0.hand.sort((a,b)=>a-b); p1.hand.sort((a,b)=>a-b); p2.hand.sort((a,b)=>a-b);
+            }
+            if (swapCallback) swapCallback();
+        }
+
+        function finishSwapPhase() {
+            gameState.swapPhase.active = false;
+            gameState.isProcessing = false;
+            gameState.players.forEach(p => p.conn.send({ type: 'close_overlay' }));
+            syncStateToAll(); 
+        }
+
+        function handlePlayerAction(action) {
+            gameState.isProcessing = true;
+            let valRevealed = 0;
+
+            if (action.target === 'table') {
+                let tc = gameState.tableCards.find(c => c.id === action.tableId);
+                tc.state = 'revealed'; valRevealed = tc.val;
+                gameState.stageCards.push({ val: valRevealed, from: 'table', tableId: tc.id });
+            } 
+            else if (action.target === 'player') {
+                let targetP = gameState.players.find(p => p.id === action.playerId);
+                let popIndex = action.extreme === 'low' ? 0 : targetP.hand.length - 1;
+                valRevealed = targetP.hand.splice(popIndex, 1)[0]; 
+                gameState.stageCards.push({ val: valRevealed, from: 'player', playerId: targetP.id, wasLow: action.extreme === 'low' });
+            }
+            syncStateToAll(); 
+            setTimeout(() => checkMatch(), 1500); 
+        }
+
+        function checkMatch() {
+            let stage = gameState.stageCards;
+            let firstVal = stage[0].val;
+            let isMatch = stage.every(c => c.val === firstVal);
+
+            if (!isMatch) {
+                stage.forEach(c => {
+                    if (c.from === 'table') {
+                        let tc = gameState.tableCards.find(x => x.id === c.tableId);
+                        if(tc) tc.state = 'hidden';
+                    } else {
+                        let p = gameState.players.find(x => x.id === c.playerId);
+                        p.hand.push(c.val); p.hand.sort((a, b) => a - b);
+                    }
+                });
+                gameState.stageCards = [];
+                gameState.activePlayerIndex = (gameState.activePlayerIndex + 1) % gameState.players.length; 
+                
+                if (gameState.activePlayerIndex === 0) {
+                    gameState.roundNumber++;
+                    // 第二轮开始换牌
+                    if (gameState.roundNumber >= 2) {
+                        triggerSwapPhase('round_start', ['red', 'blue']);
+                        return; 
+                    }
+                }
+                gameState.isProcessing = false;
+                syncStateToAll();
+            } 
+            else {
+                if (stage.length === 3) {
+                    let activeP = gameState.players[gameState.activePlayerIndex];
+                    gameState.stageCards = []; 
+                    
+                    stage.forEach(c => {
+                        if(c.from === 'table') {
+                            let tc = gameState.tableCards.find(x => x.id === c.tableId);
+                            if(tc) tc.state = 'removed';
+                        }
+                    });
+
+                    let setsRef = gameState.teamSets[activeP.team];
+                    setsRef.push(firstVal);
+                    
+                    let isWin = false; let winReason = "";
+                    let winnerName = activeP.team === 'red' ? "🔴 圣红之队" : "🔵 圣蓝之队";
+
+                    if (gameState.mode === "team-standard") {
+                        if (setsRef.length >= 3) { isWin = true; winReason = "率先凑齐了 3 组圣言卡牌！"; }
+                    } else if (gameState.mode === "team-basic") {
+                        if (firstVal === 7) { isWin = true; winReason = "找到了至高的【圣神七恩】(凑齐7)！"; } 
+                        else {
+                            for (let i = 0; i < setsRef.length; i++) {
+                                for (let j = i + 1; j < setsRef.length; j++) {
+                                    let v1 = setsRef[i]; let v2 = setsRef[j];
+                                    if (v1 + v2 === 7 || Math.abs(v1 - v2) === 7) {
+                                        isWin = true; winReason = `凑齐了连锁卡牌 [${v1}] 和 [${v2}]！`; break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (isWin) {
+                        gameState.players.forEach(p => p.conn.send({ type: 'state', gameWonBy: winnerName, reason: winReason }));
+                        return;
+                    } else {
+                        let enemyTeam = activeP.team === 'red' ? 'blue' : 'red';
+                        triggerSwapPhase('enemy_scored', [enemyTeam]);
+                        return; 
+                    }
+                }
+                gameState.isProcessing = false;
+                syncStateToAll();
+            }
+        }
+
+        function syncStateToAll() {
+            let publicPlayers = gameState.players.map(p => ({
+                id: p.id, name: p.name, cardCount: p.hand.length, team: p.team
+            }));
+
+            gameState.players.forEach((p, index) => {
+                p.conn.send({
+                    type: 'state', mode: gameState.mode, roundNumber: gameState.roundNumber,
+                    myId: p.id, myHand: p.hand, myTeam: p.team,
+                    myTurn: index === gameState.activePlayerIndex,
+                    activePlayerName: gameState.players[gameState.activePlayerIndex].name,
+                    tableCards: gameState.tableCards, publicPlayers: publicPlayers, teamSets: gameState.teamSets,
+                    stageCards: gameState.stageCards, swapPhaseActive: gameState.swapPhase.active, executingTeam: gameState.swapPhase.executingTeam
+                });
+            });
+        }
+
+        // ==========================================
+        // 3. 客户端渲染 (3D 原位翻牌 & 玩家头上要牌)
+        // ==========================================
+        let localHandCache = []; 
+
+        function renderPlayerUI(state) {
+            showScreen('play-screen');
+
+            if (state.gameWonBy) {
+                document.getElementById('play-screen').innerHTML = `
+                    <h1 style="color:#D32F2F; font-size:36px; margin-top:50px;">🎉 游戏结束 🎉</h1>
+                    <h2>恭喜 <span style="color:#2E7D32;">${state.gameWonBy}</span> 赢得了比赛！</h2>
+                    <p style="font-size:18px; font-weight:bold; color:#E65100;">${state.reason}</p>
+                    <button onclick="location.reload()" style="margin-top:30px;">返回大厅</button>
+                `;
+                return;
+            }
+            localHandCache = state.myHand; 
+
+            const tb = document.getElementById('team-banner');
+            tb.style.display = 'block';
+            if (state.myTeam === 'red') { tb.innerText = `🔴 你在【圣红之队】 | 第 ${state.roundNumber} 轮`; tb.className = "bg-red team-red"; tb.style.borderColor = "#EF9A9A"; }
+            else { tb.innerText = `🔵 你在【圣蓝之队】 | 第 ${state.roundNumber} 轮`; tb.className = "bg-blue team-blue"; tb.style.borderColor = "#90CAF9"; }
+
+            document.getElementById('red-pool-content').innerHTML = state.teamSets.red.map(s => `<div class="mini-set">${s}-${cardDefs[s]}</div>`).join('');
+            document.getElementById('blue-pool-content').innerHTML = state.teamSets.blue.map(s => `<div class="mini-set" style="color:#1565C0; border-color:#2196F3; background:#E3F2FD;">${s}-${cardDefs[s]}</div>`).join('');
+
+            const statusEl = document.getElementById('turn-status');
+            if (state.swapPhaseActive) {
+                let msg = "⚠️ 正在询问队伍是否要使用【换牌】权利...";
+                if (state.executingTeam === 'red') msg = "🔴 红队正在私下交换手牌中...";
+                if (state.executingTeam === 'blue') msg = "🔵 蓝队正在私下交换手牌中...";
+                statusEl.innerText = msg;
+                statusEl.style.background = "#E1BEE7"; statusEl.style.color = "#4A148C";
+            } else {
+                if (state.myTurn) {
+                    statusEl.innerText = "👉 轮到你了！点击圆桌暗牌，或点玩家头像上方按钮：";
+                    statusEl.style.background = "#E8F5E9"; statusEl.style.color = "#2E7D32";
+                } else {
+                    statusEl.innerText = `⏳ 等待 [${state.activePlayerName}] 翻牌...`;
+                    statusEl.style.background = "#FFF3E0"; statusEl.style.color = "#E65100";
+                }
+            }
+
+            renderRoundTable(state);
+
+            const handArea = document.getElementById('my-hand');
+            handArea.innerHTML = '';
+            state.myHand.forEach(val => {
+                handArea.innerHTML += `<div class="real-card"><div class="c-num">${val}</div><div class="c-text">${cardDefs[val]}</div></div>`;
+            });
+        }
+
+        // --- 核心：渲染圆桌布局与 3D 原位翻转 ---
+        function renderRoundTable(state) {
+            const centerPool = document.getElementById('center-pool');
+            if (centerPool.children.length !== state.tableCards.length) {
+                centerPool.innerHTML = '';
+                state.tableCards.forEach(c => {
+                    centerPool.innerHTML += `
+                        <div class="table-card-wrapper" id="tcard-wrap-${c.id}">
+                            <div class="tcard-inner" id="tcard-inner-${c.id}">
+                                <div class="tcard-back">暗</div>
+                                <div class="tcard-front"><div class="c-num" id="tcard-num-${c.id}"></div><div class="c-text" id="tcard-text-${c.id}"></div></div>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+
+            state.tableCards.forEach(c => {
+                const wrap = document.getElementById(`tcard-wrap-${c.id}`);
+                const inner = document.getElementById(`tcard-inner-${c.id}`);
+                
+                let canClick = state.myTurn && !state.swapPhaseActive && c.state === 'hidden' && state.stageCards.length < 3;
+                wrap.onclick = canClick ? () => sendAction({target: 'table', tableId: c.id}) : null;
+                wrap.querySelector('.tcard-back').style.cursor = canClick ? 'pointer' : 'default';
+
+                if (c.state === 'hidden') { inner.classList.remove('is-flipped'); wrap.style.visibility = 'visible'; } 
+                else if (c.state === 'revealed') {
+                    document.getElementById(`tcard-num-${c.id}`).innerText = c.val;
+                    document.getElementById(`tcard-text-${c.id}`).innerText = cardDefs[c.val];
+                    inner.classList.add('is-flipped'); wrap.style.visibility = 'visible';
+                } 
+                else if (c.state === 'removed') { wrap.style.visibility = 'hidden'; }
+            });
+
+            const pRevealedContainer = document.getElementById('player-revealed-cards');
+            pRevealedContainer.innerHTML = '';
+            const seatsContainer = document.getElementById('seats-container');
+            seatsContainer.innerHTML = '';
+            
+            const radiusX = window.innerWidth > 500 ? 230 : 150; 
+            const radiusY = 160; 
+            const centerX = document.getElementById('round-table-area').offsetWidth / 2;
+            const centerY = 240; 
+            
+            const totalPlayers = state.publicPlayers.length;
+            let myIndex = state.publicPlayers.findIndex(p => p.id === state.myId);
+            let angleOffset = (Math.PI / 2) - (myIndex * (2 * Math.PI / totalPlayers));
+
+            state.publicPlayers.forEach((p, index) => {
+                let angle = index * (2 * Math.PI / totalPlayers) + angleOffset;
+                let x = centerX + radiusX * Math.cos(angle);
+                let y = centerY + radiusY * Math.sin(angle);
+
+                // 计算玩家翻出的牌：往中心收缩半径
+                let revX = centerX + (radiusX - 85) * Math.cos(angle);
+                let revY = centerY + (radiusY - 65) * Math.sin(angle);
+
+                let pStageCards = state.stageCards.filter(c => c.from === 'player' && c.playerId === p.id);
+                pStageCards.forEach(c => {
+                    pRevealedContainer.innerHTML += `
+                        <div class="player-revealed" style="left:${revX}px; top:${revY}px; transform:translate(-50%,-50%);">
+                            <div class="c-num">${c.val}</div><div class="c-text">${cardDefs[c.val]}</div>
+                        </div>
+                    `;
+                });
+
+                // 在玩家头顶放置索要按钮
+                let actionHtml = '';
+                if (state.myTurn && !state.swapPhaseActive && p.cardCount > 0 && state.stageCards.length < 3) {
+                    actionHtml = `
+                        <div class="seat-actions">
+                            <button class="ask-btn low" onclick="sendAction({target: 'player', playerId: '${p.id}', extreme: 'low'})">最小牌</button>
+                            <button class="ask-btn high" onclick="sendAction({target: 'player', playerId: '${p.id}', extreme: 'high'})">最大牌</button>
+                        </div>
+                    `;
+                }
+
+                let isMyTurn = p.name === state.activePlayerName ? 'active' : '';
+                let teamClass = p.team === 'red' ? 'team-red' : 'team-blue';
+
+                seatsContainer.innerHTML += `
+                    <div class="seat ${isMyTurn} ${teamClass}" style="left: ${x}px; top: ${y}px;">
+                        ${actionHtml}
+                        <div class="seat-name">${p.name} ${p.id === state.myId ? '(我)' : ''}</div>
+                        <div class="seat-info">剩 ${p.cardCount} 张</div>
+                    </div>
+                `;
+            });
+        }
+
+        function sendAction(data) {
+            document.getElementById('turn-status').innerText = "⏳ 判定中...";
+            myConn.send({ type: 'action', actionData: data });
+        }
+
+
+        // ==========================================
+        // 4. 换牌全屏拦截弹窗 UI
+        // ==========================================
+        function openOverlay(title, desc, contentHtml) {
+            document.getElementById('int-title').innerText = title;
+            document.getElementById('int-desc').innerHTML = desc;
+            document.getElementById('int-content').innerHTML = contentHtml;
+            document.getElementById('interrupt-overlay').style.display = 'flex';
+        }
+
+        function showAskSwapUI(title, desc) {
+            let html = `
+                <button class="btn-yes" onclick="submitVote('yes')">是，需要换牌</button>
+                <button class="btn-no" onclick="submitVote('no')">否</button>
+            `;
+            openOverlay(title, desc, html);
+        }
+        function submitVote(vote) {
+            document.getElementById('int-content').innerHTML = "<span style='color:#FFEB3B; font-weight:bold;'>已回复，等待全队表决...</span>";
+            myConn.send({ type: 'swap_vote', vote: vote });
+        }
+
+        function showOfferCardUI() {
+            let html = `<div style="display:flex; flex-wrap:wrap; justify-content:center; gap:10px;">`;
+            [...new Set(localHandCache)].forEach(val => {
+                html += `<div class="swap-card-btn" onclick="submitOfferCard(${val})">${val}</div>`;
+            });
+            html += `</div>`;
+            openOverlay("📤 递出卡牌", "全队换牌表决通过！<br>请选择你手里的一张牌发给队友（如果是6人局，牌将逆时针传给下一位队友）：", html);
+        }
+        function submitOfferCard(val) {
+            document.getElementById('int-content').innerHTML = "<span style='color:#FFEB3B; font-weight:bold;'>已发出，等待全队操作完成...</span>";
+            myConn.send({ type: 'swap_offer_card', cardVal: val });
+        }
+    </script>
+</body>
+</html>

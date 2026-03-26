@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>圣三三重奏 (Holy Trios) - 信仰聚会游戏</title>
+    <style>
+        body {
+            margin: 0; padding: 0; 
+            font-family: "Georgia", "Times New Roman", serif;
+            background: linear-gradient(135deg, #0A192F 0%, #152b59 100%);
+            color: #FFFDE7; text-align: center;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            min-height: 100vh;
+        }
+        
+        .container {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 40px 30px; border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+            border: 2px solid #FBC02D;
+            width: 85%; max-width: 450px;
+            backdrop-filter: blur(10px);
+        }
+
+        h1 {
+            color: #FFEB3B; font-size: 34px; margin-bottom: 5px; margin-top: 0;
+            text-shadow: 0 0 20px rgba(255, 235, 59, 0.6); letter-spacing: 3px;
+        }
+
+        p.subtitle {
+            font-size: 15px; color: #90CAF9; font-style: italic; margin-bottom: 40px;
+            line-height: 1.6;
+        }
+
+        /* 模式选择卡片 */
+        .mode-card {
+            background: rgba(255, 255, 255, 0.95);
+            color: #1D3C78; padding: 25px 20px; border-radius: 15px;
+            margin-bottom: 20px; cursor: pointer; text-decoration: none;
+            display: block; transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.4);
+            border-left: 10px solid #1D3C78;
+            text-align: left; position: relative; overflow: hidden;
+        }
+
+        .mode-card:hover {
+            transform: translateY(-8px); box-shadow: 0 15px 35px rgba(255,235,59,0.3);
+        }
+
+        /* 个人赛蓝色边框 */
+        .card-free { border-left-color: #2196F3; }
+        .card-free .mode-title { color: #1565C0; }
+
+        /* 团队赛红色边框 */
+        .card-team { border-left-color: #D32F2F; }
+        .card-team .mode-title { color: #C62828; }
+
+        .mode-title { font-size: 24px; font-weight: bold; margin-bottom: 8px; display: flex; align-items: center; gap: 10px; }
+        .mode-desc { font-size: 14px; color: #555; line-height: 1.5; font-family: -apple-system, sans-serif; }
+        
+        .tag-row { display: flex; gap: 8px; margin-top: 12px; }
+        .tag { background: #eee; padding: 3px 8px; border-radius: 12px; font-size: 11px; color: #666; font-weight: bold; font-family: -apple-system, sans-serif; }
+
+        .footer { margin-top: 40px; font-size: 12px; color: #546E7A; letter-spacing: 1px; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>🕊️ 圣三三重奏</h1>
+        <p class="subtitle">记忆、推理与恩宠的交织。<br>找出隐秘的信仰卡牌，率先揭示真理。</p>
+
+        <!-- 链接到个人赛的独立文件 -->
+        <a href="free-for-all.html" class="mode-card card-free">
+            <div class="mode-title">👤 个人乱斗赛</div>
+            <div class="mode-desc">各自为战，全凭记忆力与对人心的揣摩。包含“标准凑3”与“入门连锁7”两种规则。</div>
+            <div class="tag-row">
+                <span class="tag">👥 2 - 6 人</span>
+                <span class="tag">⏱️ 节奏极快</span>
+            </div>
+        </a>
+
+        <!-- 链接到团队赛的独立文件 -->
+        <a href="team-battle.html" class="mode-card card-team">
+            <div class="mode-title">⚔️ 团队对抗赛</div>
+            <div class="mode-desc">红蓝两队交叉入座的硬核心理战。共享战利品，并带有极其刺激的“反击换牌”机制。</div>
+            <div class="tag-row">
+                <span class="tag" style="background:#FFCDD2; color:#C62828;">👥 限 4人 或 6人</span>
+                <span class="tag" style="background:#FFF9C4; color:#F57F17;">🧠 极度烧脑</span>
+            </div>
+        </a>
+    </div>
+
+    <div class="footer">
+        天主教福传互动桌游 (Holy Trios) · 愈显主荣
+    </div>
+
+</body>
+</html>
